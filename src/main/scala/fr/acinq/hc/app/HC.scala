@@ -101,7 +101,6 @@ class HC extends Plugin {
     require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
     Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(hcServiceRoute)
     HC.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
-    println(s"HC.clientChannelRemoteNodeIds: ${HC.clientChannelRemoteNodeIds}")
     workerRef ! Worker.ClientChannels(clientHCs)
   }
 
@@ -109,10 +108,7 @@ class HC extends Plugin {
 
     override def messageTags: Set[Int] = hostedMessageTags ++ preimageQueryTags ++ announceTags ++ chanIdMessageTags
 
-    override def forceReconnect(nodeId: PublicKey): Boolean = {
-      println(s"Attempting force-reconnect=${HC.clientChannelRemoteNodeIds.contains(nodeId)}")
-      HC.clientChannelRemoteNodeIds.contains(nodeId)
-    }
+    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
 
     override def name: String = "Hosted channels"
 

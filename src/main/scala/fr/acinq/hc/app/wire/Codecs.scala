@@ -12,13 +12,13 @@ import scodec.{Attempt, Codec, Err}
 
 
 object Codecs {
-  val invokeHostedChannelCodec: Codec[InvokeHostedChannel] = {
+  val invokeHostedChannelCodec = {
     (bytes32 withContext "chainHash") ::
       (varsizebinarydata withContext "refundScriptPubKey") ::
       (varsizebinarydata withContext "secret")
   }.as[InvokeHostedChannel]
 
-  val initHostedChannelCodec: Codec[InitHostedChannel] = {
+  val initHostedChannelCodec = {
     (uint64 withContext "maxHtlcValueInFlightMsat") ::
       (millisatoshi withContext "htlcMinimumMsat") ::
       (uint16 withContext "maxAcceptedHtlcs") ::
@@ -27,13 +27,13 @@ object Codecs {
       (channelVersionCodec withContext "version")
   }.as[InitHostedChannel]
 
-  val hostedChannelBrandingCodec: Codec[HostedChannelBranding] = {
+  val hostedChannelBrandingCodec = {
     (rgb withContext "rgbColor") ::
       (optional(bool8, varsizebinarydata) withContext "pngIcon") ::
       (variableSizeBytes(uint16, utf8) withContext "contactInfo")
   }.as[HostedChannelBranding]
 
-  val lastCrossSignedStateCodec: Codec[LastCrossSignedState] = {
+  lazy val lastCrossSignedStateCodec = {
     (bool8 withContext "isHost") ::
       (varsizebinarydata withContext "refundScriptPubKey") ::
       (lengthDelimited(initHostedChannelCodec) withContext "initHostedChannel") ::
@@ -42,20 +42,20 @@ object Codecs {
       (millisatoshi withContext "remoteBalanceMsat") ::
       (uint32 withContext "localUpdates") ::
       (uint32 withContext "remoteUpdates") ::
-      (listOfN(uint16, LightningMessageCodecs.updateAddHtlcCodec) withContext "incomingHtlcs") ::
-      (listOfN(uint16, LightningMessageCodecs.updateAddHtlcCodec) withContext "outgoingHtlcs") ::
+      (listOfN(uint16, lengthDelimited(LightningMessageCodecs.updateAddHtlcCodec)) withContext "incomingHtlcs") ::
+      (listOfN(uint16, lengthDelimited(LightningMessageCodecs.updateAddHtlcCodec)) withContext "outgoingHtlcs") ::
       (bytes64 withContext "remoteSigOfLocal") ::
       (bytes64 withContext "localSigOfRemote")
   }.as[LastCrossSignedState]
 
-  val stateUpdateCodec: Codec[StateUpdate] = {
+  val stateUpdateCodec = {
     (uint32 withContext "blockDay") ::
       (uint32 withContext "localUpdates") ::
       (uint32 withContext "remoteUpdates") ::
       (bytes64 withContext "localSigOfRemoteLCSS")
   }.as[StateUpdate]
 
-  val stateOverrideCodec: Codec[StateOverride] = {
+  val stateOverrideCodec = {
     (uint32 withContext "blockDay") ::
       (millisatoshi withContext "localBalanceMsat") ::
       (uint32 withContext "localUpdates") ::
@@ -63,27 +63,23 @@ object Codecs {
       (bytes64 withContext "localSigOfRemoteLCSS")
   }.as[StateOverride]
 
-  val announcementSignatureCodec: Codec[AnnouncementSignature] = {
+  val announcementSignatureCodec = {
     (bytes64 withContext "nodeSignature") ::
       (bool8 withContext "wantsReply")
   }.as[AnnouncementSignature]
 
-  val resizeChannelCodec: Codec[ResizeChannel] = {
+  val resizeChannelCodec = {
     (satoshi withContext "newCapacity") ::
       (bytes64 withContext "clientSig")
   }.as[ResizeChannel]
 
-  val queryPublicHostedChannelsCodec: Codec[QueryPublicHostedChannels] =
-    (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
+  val queryPublicHostedChannelsCodec = (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
 
-  val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
-    (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
+  val replyPublicHostedChannelsEndCodec = (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
-  val queryPreimagesCodec: Codec[QueryPreimages] =
-    (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
+  val queryPreimagesCodec = (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
 
-  val replyPreimagesCodec: Codec[ReplyPreimages] =
-    (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
+  val replyPreimagesCodec = (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
 
   val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
     lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
@@ -149,7 +145,7 @@ object Codecs {
     case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.getName}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unsupported HasChannelId message=${msg.getClass.getName}")
   }
 
   // Normal gossip messages which are also used in PHC gossip
@@ -173,6 +169,6 @@ object Codecs {
     case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.getName}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unsupported Announcement message=${msg.getClass.getName}")
   }
 }

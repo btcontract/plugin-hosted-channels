@@ -62,9 +62,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val data1 = restoreEmptyData(localLCSS).modify(_.commitments.localSpec.htlcs).setTo(htlcSet).modify(_.commitments.originChannels).setTo(fakeOrigins)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
-    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) =>
-      println("Client channel got data")
-      stay using data
+    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) => stay using data
 
     case Event(Worker.HCPeerConnected, HC_NOTHING) => goto(SYNCING)
 
@@ -73,14 +71,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       if (data.errorExt.isDefined) goto(CLOSED) else goto(SYNCING)
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) =>
-      println("Client channel got Worker.HCPeerConnected")
       // Client is the one who sends either an Error or InvokeHostedChannel on reconnect
       if (data.localErrors.nonEmpty) goto(CLOSED) SendingHasChannelId data.localErrors.head.error
       else if (data.remoteError.isDefined) goto(CLOSED) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CLOSED_BY_REMOTE_PEER)
-      else {
-        println("Client channel sending InvokeHostedChannel")
-        goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, data.commitments.lastCrossSignedState.refundScriptPubKey)
-      }
+      else goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, data.commitments.lastCrossSignedState.refundScriptPubKey)
 
     case Event(Worker.TickRemoveIdleChannels, HC_NOTHING) => stop(FSM.Normal)
 
@@ -281,16 +275,15 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
+    case Event(HostedChannel.SendPrivateChannelUpdateToPeer, data: HC_DATA_ESTABLISHED) if !data.commitments.announceChannel && chanParams.areDifferent(data.channelUpdate) =>
+      val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
+      HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg update1)
+      stay StoringAndUsing data.copy(channelUpdate = update1)
+
     case Event(HostedChannel.SendPrivateChannelUpdateToPeer, data: HC_DATA_ESTABLISHED) if !data.commitments.announceChannel =>
-      if (chanParams areDifferent data.channelUpdate) {
-        val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
-        HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg update1)
-        stay StoringAndUsing data.copy(channelUpdate = update1)
-      } else {
-        // Routing params have not changed, just send an existing update and do nothing
-        HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg data.channelUpdate)
-        stay
-      }
+      HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg data.channelUpdate)
+      // Routing params have not changed, just send an existing update and do nothing
+      stay
 
     // Payments
 
@@ -331,7 +324,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val nextLocalLCSS = data.resizeProposal.map(data.withResize).getOrElse(data).commitments.nextLocalUnsignedLCSS(currentBlockDay)
       stay SendingHosted nextLocalLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
 
-    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal => attemptStateUpdate(remoteSU, data)
+    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED)
+      if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal =>
+      attemptStateUpdate(remoteSU, data)
   }
 
   when(CLOSED) {
@@ -350,13 +345,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else if (data.commitments.lastCrossSignedState.isHost) stay replying CMDResFailure("Overriding declined: only client side can accept override")
       else if (data.overrideProposal.isEmpty) stay replying CMDResFailure("Overriding declined: no override proposal from host is found")
       else {
-        val remoteSO: StateOverride = data.overrideProposal.get
+        val remoteSO = data.overrideProposal.get
         val newLocalBalance = data.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat - remoteSO.localBalanceMsat
         val completeLocalLCSS = data.commitments.lastCrossSignedState.copy(incomingHtlcs = Nil, outgoingHtlcs = Nil, localBalanceMsat = newLocalBalance,
           remoteBalanceMsat = remoteSO.localBalanceMsat, localUpdates = remoteSO.remoteUpdates, remoteUpdates = remoteSO.localUpdates, blockDay = remoteSO.blockDay,
           remoteSigOfLocal = remoteSO.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
-        val isRemoteSigOk = completeLocalLCSS.verifyRemoteSig(remoteNodeId)
 
+        val isRemoteSigOk = completeLocalLCSS.verifyRemoteSig(remoteNodeId)
         if (remoteSO.localUpdates < data.commitments.lastCrossSignedState.remoteUpdates) stay replying CMDResFailure("Overridden local update number is less than remote")
         else if (remoteSO.remoteUpdates < data.commitments.lastCrossSignedState.localUpdates) stay replying CMDResFailure("Overridden remote update number is less than local")
         else if (remoteSO.blockDay < data.commitments.lastCrossSignedState.blockDay) stay replying CMDResFailure("Overridden remote blockday is less than local")
@@ -364,9 +359,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         else if (newLocalBalance < 0L.msat) stay replying CMDResFailure("Overriding declined: new local balance is less than zero")
         else if (!isRemoteSigOk) stay replying CMDResFailure("Remote override signature is wrong")
         else {
-          val localSU = completeLocalLCSS.stateUpdate
-          failTimedoutOutgoing(localAdds = data.timedOutOutgoingHtlcs(Long.MaxValue), data)
-          goto(NORMAL) StoringAndUsing restoreEmptyData(completeLocalLCSS) replying CMDResSuccess(cmd) SendingHosted localSU
+          failTimedoutOutgoing(data.timedOutOutgoingHtlcs(Long.MaxValue), data)
+          goto(NORMAL) StoringAndUsing restoreEmptyData(completeLocalLCSS) replying CMDResSuccess(cmd) SendingHosted completeLocalLCSS.stateUpdate
         }
       }
 
@@ -382,7 +376,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else if (remoteSU.localUpdates != savedRemoteUpdates) stay SendingHasChannelId wire.Error(channelId, "Override local update number is wrong")
       else if (!isRemoteSigOk) stay SendingHasChannelId wire.Error(channelId, "Override signature is wrong")
       else {
-        failTimedoutOutgoing(localAdds = data.timedOutOutgoingHtlcs(Long.MaxValue), data)
+        failTimedoutOutgoing(data.timedOutOutgoingHtlcs(Long.MaxValue), data)
         goto(NORMAL) StoringAndUsing restoreEmptyData(completeLocallySignedLCSS)
       }
   }

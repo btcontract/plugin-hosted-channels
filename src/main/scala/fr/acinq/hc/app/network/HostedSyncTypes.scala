@@ -27,14 +27,9 @@ sealed trait HostedSyncData {
 
 case class WaitForNormalNetworkData(phcNetwork: PHCNetwork) extends HostedSyncData
 
-case class OperationalData(phcNetwork: PHCNetwork,
-                           phcGossip: CollectedGossip,
-                           syncNodeId: Option[PublicKey],
-                           normalChannels: SortedMap[ShortChannelId, PublicChannel],
-                           normalGraph: DirectedGraph) extends HostedSyncData {
+case class OperationalData(phcNetwork: PHCNetwork, phcGossip: CollectedGossip, syncNodeId: Option[PublicKey], normalChannels: SortedMap[ShortChannelId, PublicChannel], normalGraph: DirectedGraph) extends HostedSyncData {
 
-  def tooFewNormalChans(nodeId1: PublicKey, nodeId2: PublicKey, phcConfig: PHCConfig): Option[PublicKey] =
-    if (normalGraph.getIncomingEdgesOf(nodeId1).size < phcConfig.minNormalChans) Some(nodeId1)
-    else if (normalGraph.getIncomingEdgesOf(nodeId2).size < phcConfig.minNormalChans) Some(nodeId2)
-    else None
+  def tooFewNormalChans(nodeId1: PublicKey, nodeId2: PublicKey, phcConfig: PHCConfig): Option[PublicKey] = tooFewNormalChans(nodeId1, phcConfig) orElse tooFewNormalChans(nodeId2, phcConfig)
+
+  def tooFewNormalChans(nodeId: PublicKey, phcConfig: PHCConfig): Option[PublicKey] = if (normalGraph.getIncomingEdgesOf(nodeId).size < phcConfig.minNormalChans) Some(nodeId) else None
 }
