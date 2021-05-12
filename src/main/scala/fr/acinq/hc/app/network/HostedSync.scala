@@ -267,7 +267,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       val okNormalChans = data.tooFewNormalChans(ann.nodeId1, ann.nodeId2, phcConfig).isEmpty
       okNormalChans && data.phcNetwork.isAnnounceAcceptable(ann)
     }
-
+    
     def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
       case Some(pubHostedChan) if data.tooFewNormalChans(pubHostedChan.channelAnnounce.nodeId1, pubHostedChan.channelAnnounce.nodeId2, phcConfig).isDefined =>
         log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
