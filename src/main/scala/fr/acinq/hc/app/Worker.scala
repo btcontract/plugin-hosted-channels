@@ -65,7 +65,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       else if (HC.hostedMessageTags contains message.tag) {
         Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
           case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
-          case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for hosted channel message=${message.tag}, peer=$nodeId")
+          case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for hosted channel messageTag=${message.tag}, peer=$nodeId")
           case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
           case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
@@ -76,10 +76,10 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
         }
       } else if (HC.chanIdMessageTags contains message.tag) {
         Tuple3(Codecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-          case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
-          case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for containing channel id message=${message.tag}, peer=$nodeId")
+          case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, messageTag=${message.tag}, peer=$nodeId")
+          case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for containing channel id messageTag=${message.tag}, peer=$nodeId")
           case (Attempt.Successful(error: eclair.wire.Error), _, null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
-          case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
+          case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, messageTag=${message.tag}, peer=$nodeId")
           case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
         }
       }
